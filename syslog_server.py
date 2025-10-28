@@ -7,7 +7,7 @@ import threading
 import socket 
 
 # Use 0.0.0.0 to listen on all available IPs
-HOST, PORT = "0.0.0.0", 5140
+HOST, PORT = "192.168.10.2", 5140
 
 # Get the IP of the host-only adapter for a nice print message
 # This is a bit advanced, but useful. We'll default to 0.0.0.0 if we can't find it.
