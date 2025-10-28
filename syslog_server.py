@@ -4,6 +4,7 @@ import database
 import log_schema
 from log_schema import normalize_from_nxlog_json # Our new parser
 import threading
+import socket 
 
 # Use 0.0.0.0 to listen on all available IPs
 HOST, PORT = "0.0.0.0", 5140
@@ -56,7 +57,8 @@ class LogRequestHandler(socketserver.StreamRequestHandler):
                     log_data = json.loads(log_json_str)
                     
                     # 3. Normalize the log using our schema function
-                    normalized_log = normalize_from_nxlog_json(log_data)
+                    # ******** THIS IS THE FIX ********
+                    normalized_log = normalize_from_nxlog_json(log_data, client_ip)
                     
                     # 4. Save the normalized log to our database
                     database.insert_log(normalized_log)
