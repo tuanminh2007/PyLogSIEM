@@ -11,7 +11,7 @@ HOST, PORT = "192.168.10.2", 5140
 
 # Get the IP of the host-only adapter for a nice print message
 # This is a bit advanced, but useful. We'll default to 0.0.0.0 if we can't find it.
-LISTEN_IP = "0.0.0.0"
+LISTEN_IP = "192.168.10.2"
 try:
     # This is a 'hack' to find the IP of the interface used to route to a public IP
     # In our VM, it should find the 192.168.1.10 (or 192.168.10.2) IP
