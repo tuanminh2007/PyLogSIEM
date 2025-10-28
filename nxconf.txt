@@ -1,0 +1,41 @@
+# Defines the root directory for NXLog
+define ROOT C:\Program Files\nxlog
+
+# Sets log file and module paths
+Moduledir %ROOT%\modules
+CacheDir %ROOT%\data
+Pidfile %ROOT%\data\nxlog.pid
+SpoolDir %ROOT%\data
+LogFile %ROOT%\data\nxlog.log
+
+# 1. INPUT: Read from the Windows Security Event Log
+<Input security_logs>
+    # Use the Windows Event Log (Vista+) module
+    Module      im_msvistalog
+
+    # Read only from the "Security" log.
+    # This single-line query is more robust than the multi-line version.
+    Query       <QueryList><Query Id="0" Path="Security"><Select Path="Security">*</Select></Query></QueryList>
+</Input>
+
+# 2. OUTPUT: Convert to JSON and Send over TCP
+<Output siem_server>
+    # Use the TCP output module
+    Module      om_tcp
+    
+    # IP of your Linux SIEM VM (from network_planning.md)
+    Host        192.168.10.2
+    
+    # Port to send logs to (we will build our Python listener on this port)
+    Port        5140
+    
+    # This is the magic:
+    # 1. Convert the entire event to JSON
+    # 2. Add a newline character, which our Python server will use as a delimiter
+    Exec        to_json(); $raw_event = $raw_event + "\n";
+</Output>
+
+# 3. ROUTE: Connect the input to the output
+<Route 1>
+    Path        security_logs => siem_server
+</Route>
