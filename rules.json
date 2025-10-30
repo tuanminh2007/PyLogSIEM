@@ -6,7 +6,7 @@
     "level": "CRITICAL",
     "type": "match",
     "match": {
-      "event_id": 4728
+      "EventID": 4728
     }
   },
   {
@@ -16,7 +16,7 @@
     "level": "HIGH",
     "type": "match",
     "match": {
-      "event_id": 4732
+      "EventID": 4732
     }
   },
   {
@@ -26,8 +26,8 @@
     "level": "MEDIUM",
     "type": "match",
     "match": {
-      "event_id": 4688,
-      "process_name": "powershell.exe"
+      "EventID": 4688,
+      "NewProcessName": "*powershell.exe"
     }
   },
   {
@@ -37,9 +37,9 @@
     "level": "HIGH",
     "type": "threshold",
     "match": {
-      "event_type": "FAILED_LOGIN"
+      "EventID": 4625
     },
-    "group_by": "source_ip",
+    "group_by": "IpAddress",
     "threshold": 5,
     "timeframe_seconds": 60
   }

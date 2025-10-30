@@ -39,14 +39,28 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                     print(f"[ERROR] Failed to decode JSON from {client_ip}: {log_json[:100]}...")
                     continue
 
-                # --- 2. NORMALIZE ---
+                # --- 2. CHECK RULES (M2.3 & M2.4) ---
+                # We now run rules on the RAW log_data dict
+                try:
+                    alerts = rule_engine.check_all_rules(
+                        log_data, 
+                        self.server.rules, 
+                        self.server.state_tracker,
+                        verbose=VERBOSE_RULE_CHECK
+                    )
+                except Exception as e:
+                    print(f"[ERROR] Rule engine failed: {e}")
+                    alerts = [] # Ensure alerts is a list
+
+                # --- 3. NORMALIZE ---
+                # Normalization now happens *after* detection
                 try:
                     normalized_log = log_schema.normalize_from_nxlog_json(log_data, client_ip)
                 except Exception as e:
                     print(f"[ERROR] Failed to normalize log: {e}")
                     continue
 
-                # --- 3. SAVE TO DB ---
+                # --- 4. SAVE TO DB ---
                 try:
                     database.insert_log(self.server.db_conn, normalized_log)
                     print(f"[Database] Saved Event {normalized_log.get('event_id')} from {client_ip}")
@@ -54,27 +68,19 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                     print(f"[ERROR] Failed to save log to DB: {e}")
                     continue
 
-                # --- 4. CHECK RULES (M2.3) ---
-                try:
-                    # Pass the server's state_tracker to the rule engine
-                    alerts = rule_engine.check_all_rules(
-                        normalized_log, 
-                        self.server.rules, 
-                        self.server.state_tracker,  # <-- This is the change
-                        verbose=VERBOSE_RULE_CHECK
-                    )
-                    
-                    for alert in alerts:
-                        print("\n" + "!"*20 + " ALERT " + "!"*20)
-                        print(f"  Rule ID:   {alert['rule_id']}")
-                        print(f"  Name:    {alert['rule_name']}")
-                        print(f"  Level:   {alert['level']}")
-                        print(f"  Event:   {normalized_log.get('event_type')} (ID: {normalized_log.get('event_id')})")
-                        print(f"  Source:  {normalized_log.get('source_ip')} ({normalized_log.get('source_host_ip')})")
-                        print(f"  User:    {normalized_log.get('username')}")
-                        print("!"*47 + "\n")
-                except Exception as e:
-                    print(f"[ERROR] Rule engine failed: {e}")
+                # --- 5. EMIT ALERTS ---
+                # We process the alerts *after* saving, so the log is in the DB
+                # when the alert fires.
+                for alert in alerts:
+                    print("\n" + "!"*20 + " ALERT " + "!"*20)
+                    print(f"  Rule ID:   {alert['rule_id']}")
+                    print(f"  Name:    {alert['rule_name']}")
+                    print(f"  Level:   {alert['level']}")
+                    # We can use the normalized_log for clean output
+                    print(f"  Event:   {normalized_log.get('event_type')} (ID: {normalized_log.get('event_id')})")
+                    print(f"  Source:  {normalized_log.get('source_ip')} ({normalized_log.get('source_host_ip')})")
+                    print(f"  User:    {normalized_log.get('username')}")
+                    print("!"*47 + "\n")
 
         except ConnectionResetError:
             print(f"[Syslog Server] Client disconnected (connection reset): {client_ip}")
