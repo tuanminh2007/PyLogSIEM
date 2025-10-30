@@ -101,7 +101,7 @@ def normalize_from_nxlog_json(log_data: dict, source_host_ip: str) -> dict:
 
     # PROC_CREATED (4688)
     elif norm_event["event_type"] == PROC_CREATED:
-        norm_event["username"] = log_data.get("AccountName", "N/A")
+        norm_event["username"] = log_data.get("SubjectUserName", "N/A")
         norm_event["process_name"] = log_data.get("NewProcessName", "N/A")
         norm_event["process_id"] = str(log_data.get("NewProcessID", "N/A"))
         
