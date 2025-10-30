@@ -56,7 +56,14 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
 
                 # --- 4. CHECK RULES (M2.3) ---
                 try:
-                    alerts = rule_engine.check_all_rules(normalized_log, self.server.rules, verbose=VERBOSE_RULE_CHECK)
+                    # Pass the server's state_tracker to the rule engine
+                    alerts = rule_engine.check_all_rules(
+                        normalized_log, 
+                        self.server.rules, 
+                        self.server.state_tracker,  # <-- This is the change
+                        verbose=VERBOSE_RULE_CHECK
+                    )
+                    
                     for alert in alerts:
                         print("\n" + "!"*20 + " ALERT " + "!"*20)
                         print(f"  Rule ID:   {alert['rule_id']}")
@@ -112,7 +119,8 @@ if __name__ == "__main__":
         
         # Make the db connection and rules available to all handlers
         server.db_conn = db_conn 
-        server.rules = rules 
+        server.rules = rules
+        server.state_tracker = {} 
         
         print(f"\n[Syslog Server] Started on {display_ip}:{PORT} (Listening on {HOST}:{PORT})")
         print("Waiting for logs... (Press Ctrl+C to shut down)")
