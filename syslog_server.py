@@ -80,6 +80,12 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                     print(f"  Source:  {normalized_log.get('source_ip')} ({normalized_log.get('host_ip')})")
                     print(f"  User:    {normalized_log.get('username')}")
                     
+                    # --- NEW BLOCK TO SHOW TARGET USER ---
+                    target_user = normalized_log.get('target_username')
+                    if target_user and target_user != 'N/A':
+                        print(f"  Target User: {target_user}") # This is the "target user"
+                    # --- END NEW BLOCK ---
+                    
                     # Add process info if it's a process alert
                     process = normalized_log.get('process_name')
                     if process and process != 'N/A':
