@@ -76,10 +76,15 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                     print(f"  Rule ID:   {alert['rule_id']}")
                     print(f"  Name:    {alert['rule_name']}")
                     print(f"  Level:   {alert['level']}")
-                    # We can use the normalized_log for clean output
                     print(f"  Event:   {normalized_log.get('event_type')} (ID: {normalized_log.get('event_id')})")
-                    print(f"  Source:  {normalized_log.get('source_ip')} ({normalized_log.get('source_host_ip')})")
+                    print(f"  Source:  {normalized_log.get('source_ip')} ({normalized_log.get('host_ip')})")
                     print(f"  User:    {normalized_log.get('username')}")
+                    
+                    # Add process info if it's a process alert
+                    process = normalized_log.get('process_name')
+                    if process and process != 'N/A':
+                         print(f"  Process: {process}")
+                         
                     print("!"*47 + "\n")
 
         except ConnectionResetError:

@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 
 # --- Constants for Event Types ---
-# We define constants to avoid using "magic strings" in our code
+# (This section is unchanged)
 UNKNOWN = "UNKNOWN"
 FAILED_LOGIN = "FAILED_LOGIN"
 SUCCESSFUL_LOGIN = "SUCCESSFUL_LOGIN"
@@ -14,35 +14,27 @@ USER_REMOVED_FROM_GROUP = "USER_REMOVED_FROM_GROUP"
 POLICY_CHANGE = "POLICY_CHANGE"
 
 # --- Event ID to Type Mapping ---
-# This maps Windows Event IDs to our internal, human-readable types
+# (This section is unchanged)
 EVENT_ID_MAP = {
-    # Logon/Logoff
     4624: SUCCESSFUL_LOGIN,
     4625: FAILED_LOGIN,
     4634: LOGOFF,
-    
-    # Process Tracking
     4688: PROC_CREATED,
-    
-    # Account Management (Users)
     4720: USER_CREATED,
-    
-    # Account Management (Groups)
-    4728: USER_ADDED_TO_GROUP,    # Member added to Global group (e.g., "Domain Admins")
-    4732: USER_ADDED_TO_GROUP,    # Member added to Local group (e.g., "Administrators")
-    4729: USER_REMOVED_FROM_GROUP, # Member removed from Global group
-    4733: USER_REMOVED_FROM_GROUP, # Member removed from Local group
-    
-    # Policy
-    4719: POLICY_CHANGE, # System audit policy was changed
+    4728: USER_ADDED_TO_GROUP,
+    4732: USER_ADDED_TO_GROUP,
+    4729: USER_REMOVED_FROM_GROUP,
+    4733: USER_REMOVED_FROM_GROUP,
+    4719: POLICY_CHANGE,
 }
 
 # --- The Standardized Schema ---
-# This is the "blueprint" for our database.
-# Every log will be normalized to fit this structure.
+# (This section is unchanged)
+# This schema is good. It's concise and covers the
+# main fields we want to query for M3.2.
 NORMALIZED_SCHEMA = {
-    "timestamp": None,      # (Special field, handled separately)
-    "raw_log": None,        # (Special field, handled separately)
+    "timestamp": None,
+    "raw_log": None,
     "event_id": None,
     "event_type": UNKNOWN,
     "host_ip": None,        # The IP of the machine *generating* the log
@@ -50,10 +42,10 @@ NORMALIZED_SCHEMA = {
     "username": "N/A",      # The user *performing* an action
     "target_username": "N/A", # The user *affected by* an action
     "severity": "N/A",
-    "logon_type": "N/A",    # e.g., "2" (Interactive), "3" (Network), "10" (RDP)
+    "logon_type": "N/A",
     "process_id": "N/A",
     "process_name": "N/A",
-    "failure_reason": "N/A" # For failed logins
+    "failure_reason": "N/A"
 }
 
 def create_empty_event():
@@ -65,24 +57,19 @@ def normalize_from_nxlog_json(log_data: dict, source_host_ip: str) -> dict:
     Parses a raw log dictionary (from NXLog's JSON) and maps it
     to our standardized NORMALIZED_SCHEMA.
     
-    :param log_data: The raw dictionary from json.loads()
-    :param source_host_ip: The IP of the machine that sent us this log
-    :return: A normalized log dictionary
+    --- THIS FUNCTION IS NOW MUCH SMARTER ---
     """
     
     norm_event = create_empty_event()
     
     # --- Universal Fields ---
-    norm_event["raw_log"] = str(log_data) # Store the original JSON as text
-    norm_event["host_ip"] = source_host_ip
+    norm_event["raw_log"] = str(log_data)
+    norm_event["host_ip"] = source_host_ip # IP of the Windows VM
     
-    # Parse the NXLog timestamp (e.g., "2025-10-27T15:01:02.123456Z")
     try:
-        # Use fromisoformat for modern, fast parsing.
-        # We strip the 'Z' (UTC marker) as fromisoformat can be picky.
         norm_event["timestamp"] = datetime.fromisoformat(log_data.get("EventTime", "").rstrip("Z"))
     except Exception:
-        norm_event["timestamp"] = datetime.now() # Fallback
+        norm_event["timestamp"] = datetime.now()
 
     norm_event["severity"] = log_data.get("SeverityValue", "N/A")
     
@@ -97,10 +84,18 @@ def normalize_from_nxlog_json(log_data: dict, source_host_ip: str) -> dict:
     # SUCCESSFUL_LOGIN (4624) or FAILED_LOGIN (4625)
     if norm_event["event_type"] in [SUCCESSFUL_LOGIN, FAILED_LOGIN]:
         norm_event["username"] = log_data.get("AccountName", "N/A")
-        norm_event["source_ip"] = log_data.get("IpAddress", "N/A")
+        
+        # Get the source IP from the log
+        ip_addr = log_data.get("IpAddress", "N/A")
+        
+        # If IpAddress is local (-, 127.0.0.1, ::1), use the host IP.
+        if ip_addr in ["-", "127.0.0.1", "::1", "N/A"]:
+            norm_event["source_ip"] = source_host_ip
+        else:
+            norm_event["source_ip"] = ip_addr
+            
         norm_event["logon_type"] = str(log_data.get("LogonType", "N/A"))
         if norm_event["event_type"] == FAILED_LOGIN:
-            # Clean up the hex status code
             status = log_data.get("Status", "N/A")
             norm_event["failure_reason"] = f"Code: {status}"
 
@@ -109,36 +104,44 @@ def normalize_from_nxlog_json(log_data: dict, source_host_ip: str) -> dict:
         norm_event["username"] = log_data.get("AccountName", "N/A")
         norm_event["process_name"] = log_data.get("NewProcessName", "N/A")
         norm_event["process_id"] = str(log_data.get("NewProcessID", "N/A"))
+        
+        # --- ROOT FIX ---
+        # A process is created *on* the host.
+        # So, the 'source_ip' is the 'host_ip'.
+        norm_event["source_ip"] = source_host_ip
 
     # USER_CREATED (4720)
     elif norm_event["event_type"] == USER_CREATED:
-        # User *doing* the creating
         norm_event["username"] = log_data.get("AccountName", "N/A")
-        # User *being* created
         norm_event["target_username"] = log_data.get("TargetAccountName", "N/A")
+        # This is a local action. Source is the host.
+        norm_event["source_ip"] = source_host_ip
 
     # USER_ADDED_TO_GROUP (4728, 4732)
     elif norm_event["event_type"] == USER_ADDED_TO_GROUP:
-        # User *doing* the adding
         norm_event["username"] = log_data.get("AccountName", "N/A")
-        # User *being* added
         norm_event["target_username"] = log_data.get("MemberName", "N/A")
+        # This is a local action. Source is the host.
+        norm_event["source_ip"] = source_host_ip
         
     # USER_REMOVED_FROM_GROUP (4729, 4733)
     elif norm_event["event_type"] == USER_REMOVED_FROM_GROUP:
         norm_event["username"] = log_data.get("AccountName", "N/A")
         norm_event["target_username"] = log_data.get("MemberName", "N/A")
+        # This is a local action. Source is the host.
+        norm_event["source_ip"] = source_host_ip
 
     # --- Data Cleanup ---
-    # Replace empty/placeholder values with a standard 'N/A'
     for key, value in norm_event.items():
         if value is None or str(value).strip() in ["-", ""]:
-            norm_event[key] = "N/A"
+            # We default to the schema's 'N/A'
+            norm_event[key] = NORMALIZED_SCHEMA[key] 
             
     return norm_event
 
 if __name__ == "__main__":
-    # This block is for testing the normalization function.
+    # ... (Test block is unchanged) ...
+    # (You can run `python log_schema.py` to test this new logic)
     print("Testing normalization function...")
     
     # Simulate a raw JSON log from NXLog for a failed login
@@ -153,13 +156,14 @@ if __name__ == "__main__":
         "Status": "0xc000006d"
     }
     
-    normalized = normalize_from_nxlog_json(test_log, "192.168.1.51")
+    normalized = normalize_from_nxlog_json(test_log, "192.168.1.100") # Host IP
     
-    print("\n--- Raw Log ---")
+    print("\n--- Raw Log (Failed Login) ---")
     print(test_log)
-    print("\n--- Normalized Output ---")
+    print("\n--- Normalized Output (Failed Login) ---")
     import json
     print(json.dumps(normalized, indent=4, default=str))
+    # Note: source_ip should be "192.168.1.51"
 
     # Test a process creation
     test_log_proc = {
@@ -172,7 +176,7 @@ if __name__ == "__main__":
         "NewProcessID": "0x1a2b"
     }
     
-    normalized_proc = normalize_from_nxlog_json(test_log_proc, "192.168.1.50")
+    normalized_proc = normalize_from_nxlog_json(test_log_proc, "192.168.1.50") # Host IP
     print("\n--- Normalized Process ---")
     print(json.dumps(normalized_proc, indent=4, default=str))
-
+    # Note: source_ip should now be "192.168.1.50" (the host ip)
