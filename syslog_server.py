@@ -1,11 +1,11 @@
 import socketserver
 import json
-import socket
+import socket  # <-- Import to fix the NameError
 import threading
 
 # Import our project-specific modules
 import database
-import rule_engine  # <-- IMPORT THE NEW RULE ENGINE
+import rule_engine
 from log_schema import normalize_from_nxlog_json
 
 # --- Configuration ---
@@ -48,13 +48,16 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                 
                 # --- 2. NORMALIZE LOG ---
                 try:
+                    # Pass the client_ip to the normalization function
                     normalized_log = normalize_from_nxlog_json(log_data, client_ip)
                 except Exception as e:
+                    # Catch the "missing 1 argument" error if it happens
                     print(f"[ERROR] Failed to normalize log: {e}\nRaw log: {log_data}")
                     continue
                 
                 # --- 3. SAVE LOG TO DB ---
                 try:
+                    # Use the server's shared database connection
                     database.insert_log(self.server.db_conn, normalized_log)
                     print(f"[DATABASE] Saved Event {normalized_log.get('event_id', 'N/A')} from {normalized_log.get('host_ip')}")
                 except Exception as e:
@@ -62,7 +65,6 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                     continue
 
                 # --- 4. CHECK RULES ---
-                # This is the new part for M2.3!
                 try:
                     # Pass the log, rules, and state to the engine
                     alerts = rule_engine.check_all_rules(normalized_log, self.server.rules, rule_state)
@@ -79,7 +81,9 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
                     print(f"[ERROR] Rule engine failed: {e}")
 
         except Exception as e:
-            print(f"[ERROR] Error in socket handler: {e}")
+            # Catch errors like 'Connection reset by peer'
+            if "Connection reset" not in str(e):
+                print(f"[ERROR] Error in socket handler: {e}")
         finally:
             print(f"[SYSLOG] Client {client_ip} disconnected.")
 
@@ -87,13 +91,15 @@ class LogRequestHandler(socketserver.BaseRequestHandler):
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     """A threaded TCP server to handle multiple clients."""
     allow_reuse_address = True
-    daemon_threads = True  # Allows clean shutdown with Ctrl+C
+    daemon_threads = True  # This is True by default, but good to be explicit.
+                           # Daemon threads will exit when the main thread exits.
 
 # --- Main Server Startup ---
 if __name__ == "__main__":
     # --- 1. Find our internal IP (for display only) ---
     internal_ip = "0.0.0.0"
     try:
+        # This is a small "hack" to find the machine's primary internal IP
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         internal_ip = s.getsockname()[0]
@@ -103,13 +109,14 @@ if __name__ == "__main__":
 
     # --- 2. Initialize Database ---
     try:
-        db_conn = database.init_db(SIEM_DB)
+        # Call init_db with zero arguments, as per our fix
+        db_conn = database.init_db() 
         print(f"[DATABASE] Database '{SIEM_DB}' initialized successfully.")
     except Exception as e:
         print(f"[FATAL] Database initialization error: {e}")
         exit(1)
         
-    # --- 3. Load Detection Rules (NEW) ---
+    # --- 3. Load Detection Rules ---
     rules = rule_engine.load_rules()
     if not rules:
         print("[WARNING] No rules were loaded. SIEM will only log events.")
@@ -128,6 +135,7 @@ if __name__ == "__main__":
         server.serve_forever()
         
     except KeyboardInterrupt:
+        # This block will now be reached on the *first* Ctrl+C
         print("\n[SYSLOG] Shutdown signal received...")
     except Exception as e:
         print(f"[FATAL] Server startup error: {e}")
@@ -135,6 +143,7 @@ if __name__ == "__main__":
         # Clean up
         if 'db_conn' in locals():
             db_conn.close()
+            print("[DATABASE] Database connection closed.")
         if 'server' in locals():
             server.server_close()
         print("[SYSLOG] Server shut down gracefully.")
