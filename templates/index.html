@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PyLogSIEM - Live Dashboard</title>
-    <!-- Use Tailwind CSS for easy, modern styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 1. UPDATED: Load Tailwind using Flask's url_for helper for a robust path -->
+    <script src="{{ url_for('static', filename='js/tailwind.js') }}"></script>
+
     <style>
         /* Simple style for new alerts */
         .alert-new {
@@ -40,23 +42,22 @@
     </div>
 
     <!-- 
-      - 1. Import the Socket.IO client library 
-      - We need this for the JavaScript socket.io object
+      - 2. UPDATED: Import the Socket.IO client using Flask's url_for helper
     -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
     
     <script>
         // Wait for the document to be fully loaded
         document.addEventListener('DOMContentLoaded', (event) => {
             
-            // 2. Connect to our server's WebSocket
-            // This URL will connect to the same host and port the page was served from
+            // 3. Connect to our server's WebSocket
+            // This URL (io()) will still work perfectly
             const socket = io();
 
             const statusIndicator = document.getElementById('status-indicator');
             const alertFeed = document.getElementById('alert-feed');
 
-            // 3. Handle built-in "connect" event
+            // 4. Handle built-in "connect" event
             socket.on('connect', () => {
                 console.log('Successfully connected to server!');
                 statusIndicator.classList.remove('bg-red-500');
@@ -69,7 +70,7 @@
                 }
             });
 
-            // 4. Handle built-in "disconnect" event
+            // 5. Handle built-in "disconnect" event
             socket.on('disconnect', () => {
                 console.log('Disconnected from server.');
                 statusIndicator.classList.remove('bg-green-500');
@@ -77,9 +78,7 @@
                 statusIndicator.title = 'Disconnected';
             });
 
-            // 5. Handle our *custom* "new_alert" event
-            // This is the most important part!
-            // The server will 'emit' this event when a rule is triggered.
+            // 6. Handle our *custom* "new_alert" event
             socket.on('new_alert', (alert) => {
                 console.log('Received new alert:', alert);
 
@@ -106,3 +105,4 @@
     </script>
 </body>
 </html>
+
