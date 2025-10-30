@@ -1,117 +1,141 @@
 import socketserver
 import json
-import database
-import log_schema
-from log_schema import normalize_from_nxlog_json # Our new parser
+import socket
 import threading
-import socket 
 
-# Use 0.0.0.0 to listen on all available IPs
-HOST, PORT = "192.168.10.2", 5140
+# Import our project-specific modules
+import database
+import rule_engine  # <-- IMPORT THE NEW RULE ENGINE
+from log_schema import normalize_from_nxlog_json
 
-# Get the IP of the host-only adapter for a nice print message
-# This is a bit advanced, but useful. We'll default to 0.0.0.0 if we can't find it.
-LISTEN_IP = "192.168.10.2"
-try:
-    # This is a 'hack' to find the IP of the interface used to route to a public IP
-    # In our VM, it should find the 192.168.1.10 (or 192.168.10.2) IP
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    LISTEN_IP = s.getsockname()[0]
-    s.close()
-except OSError:
-    print("Warning: Could not auto-detect host-only IP. Listening on all interfaces.")
+# --- Configuration ---
+HOST, PORT = "0.0.0.0", 5140
+SIEM_DB = 'pylogsiem.db'
 
+# This will be our "state" for the rule engine (for M2.4)
+# It's a dictionary that will hold recent events
+rule_state = {}
 
-class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+class LogRequestHandler(socketserver.BaseRequestHandler):
     """
-    A TCP server that handles each new connection in a separate thread.
-    This is critical for a SIEM so one slow client can't block another.
-    """
-    daemon_threads = True       # This is the key: allows main thread to exit
-    allow_reuse_address = True  # Allows server to restart quickly
-
-class LogRequestHandler(socketserver.StreamRequestHandler):
-    """
-    This class is instantiated once per connection.
-    The 'handle' method is run in a new thread.
+    Handles incoming TCP log messages.
+    A new instance is created for each connection.
     """
     def handle(self):
         client_ip = self.client_address[0]
-        print(f"[+] Connection from {client_ip}")
+        print(f"[SYSLOG] Client connection from {client_ip}")
         
         try:
-            # self.rfile is a file-like object for the socket
-            # We can iterate over it line-by-line, which is perfect for syslog
-            for line in self.rfile:
-                # 1. Decode the raw bytes to a string and strip whitespace/newlines
-                log_json_str = line.decode('utf-8').strip()
+            # self.request is the client socket
+            client_socket_file = self.request.makefile('r', encoding='utf-8')
+            
+            # Loop and read data line-by-line
+            while True:
+                line = client_socket_file.readline()
+                if not line:
+                    break  # Client disconnected
                 
-                # If we get an empty line, just ignore it
-                if not log_json_str:
+                log_json = line.strip()
+                if not log_json:
                     continue
 
-                # 2. Process the log line in a try/except block
+                # --- 1. PARSE LOG ---
                 try:
-                    # Parse the JSON string into a Python dictionary
-                    log_data = json.loads(log_json_str)
-                    
-                    # 3. Normalize the log using our schema function
-                    # ******** THIS IS THE FIX ********
-                    normalized_log = normalize_from_nxlog_json(log_data, client_ip)
-                    
-                    # 4. Save the normalized log to our database
-                    database.insert_log(normalized_log)
-                    
-                    # 5. Print a clean, friendly message to the console
-                    print(f"  [OK] Normalized and saved Event {normalized_log.get('event_id')} from {normalized_log.get('host_ip')}")
-
+                    log_data = json.loads(log_json)
                 except json.JSONDecodeError:
-                    print(f"  [ERROR] Received non-JSON data from {client_ip}: {log_json_str[:80]}...")
+                    print(f"[SYSLOG] Received non-JSON data from {client_ip}: {log_json}")
+                    continue
+                
+                # --- 2. NORMALIZE LOG ---
+                try:
+                    normalized_log = normalize_from_nxlog_json(log_data, client_ip)
                 except Exception as e:
-                    print(f"  [ERROR] Failed to process/save log: {e}")
-                    
-        except ConnectionResetError:
-            # This happens when a client (NXLog) disconnects forcefully
-            print(f"[-] Client {client_ip} disconnected (connection reset).")
-        except Exception as e:
-            # Catch any other handler-level errors
-            print(f"[-] An error occurred in the handler for {client_ip}: {e}")
-        finally:
-            # This 'finally' block runs when the loop is broken
-            # (i.e., the client disconnects)
-            print(f"[-] Connection closed from {client_ip}")
+                    print(f"[ERROR] Failed to normalize log: {e}\nRaw log: {log_data}")
+                    continue
+                
+                # --- 3. SAVE LOG TO DB ---
+                try:
+                    database.insert_log(self.server.db_conn, normalized_log)
+                    print(f"[DATABASE] Saved Event {normalized_log.get('event_id', 'N/A')} from {normalized_log.get('host_ip')}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to save log to DB: {e}")
+                    continue
 
-# --- Main execution ---
+                # --- 4. CHECK RULES ---
+                # This is the new part for M2.3!
+                try:
+                    # Pass the log, rules, and state to the engine
+                    alerts = rule_engine.check_all_rules(normalized_log, self.server.rules, rule_state)
+                    
+                    # For now, just print any alerts to the console
+                    if alerts:
+                        for alert in alerts:
+                            print(f"\n!!!!!!!!!!!! ALERT !!!!!!!!!!")
+                            print(f"  Rule: {alert['rule_name']} ({alert['level']})")
+                            print(f"  Desc: {alert['description']}")
+                            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+                            
+                except Exception as e:
+                    print(f"[ERROR] Rule engine failed: {e}")
+
+        except Exception as e:
+            print(f"[ERROR] Error in socket handler: {e}")
+        finally:
+            print(f"[SYSLOG] Client {client_ip} disconnected.")
+
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    """A threaded TCP server to handle multiple clients."""
+    allow_reuse_address = True
+    daemon_threads = True  # Allows clean shutdown with Ctrl+C
+
+# --- Main Server Startup ---
 if __name__ == "__main__":
-    
-    print("[DB] Initializing database...")
-    # Initialize the database (creates table if it doesn't exist)
-    database.init_db()
-    
-    # Create the server instance
-    server = ThreadingTCPServer((HOST, PORT), LogRequestHandler)
-    
+    # --- 1. Find our internal IP (for display only) ---
+    internal_ip = "0.0.0.0"
     try:
-        print(f"[SIEM] Syslog server started on {LISTEN_IP}:{PORT}...")
-        print("[SIEM] Waiting for logs... (Press Ctrl+C to shut down)")
-        # Start the server's main loop.
-        # This will block until a KeyboardInterrupt (Ctrl+C).
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        internal_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        print("Could not detect internal IP. Using 0.0.0.0")
+
+    # --- 2. Initialize Database ---
+    try:
+        db_conn = database.init_db(SIEM_DB)
+        print(f"[DATABASE] Database '{SIEM_DB}' initialized successfully.")
+    except Exception as e:
+        print(f"[FATAL] Database initialization error: {e}")
+        exit(1)
+        
+    # --- 3. Load Detection Rules (NEW) ---
+    rules = rule_engine.load_rules()
+    if not rules:
+        print("[WARNING] No rules were loaded. SIEM will only log events.")
+
+    # --- 4. Start the Server ---
+    try:
+        server = ThreadedTCPServer((HOST, PORT), LogRequestHandler)
+        
+        # Make the db connection and rules available to all handlers
+        server.db_conn = db_conn 
+        server.rules = rules 
+        
+        print(f"[SYSLOG] Syslog server started on {internal_ip}:{PORT}...")
+        
+        # Run the server loop
         server.serve_forever()
         
     except KeyboardInterrupt:
-        # This block catches the Ctrl+C
-        print("\n[SIEM] Shutdown signal (Ctrl+C) received...")
-        
+        print("\n[SYSLOG] Shutdown signal received...")
     except Exception as e:
-        # Catch any fatal server errors (e.g., port in use)
-        print(f"\n[SIEM] Server crashed with a fatal error: {e}")
-        
+        print(f"[FATAL] Server startup error: {e}")
     finally:
-        # This 'finally' block runs no matter what (on clean exit or crash)
-        # We just need to close the main server socket.
-        # The 'daemon_threads = True' setting will handle killing
-        # any active handler threads automatically.
-        server.server_close()
-        print("[SIEM] Server shut down.")
+        # Clean up
+        if 'db_conn' in locals():
+            db_conn.close()
+        if 'server' in locals():
+            server.server_close()
+        print("[SYSLOG] Server shut down gracefully.")
 

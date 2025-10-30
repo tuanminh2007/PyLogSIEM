@@ -1,0 +1,54 @@
+[
+    {
+        "rule_id": "SIEM-001",
+        "rule_name": "Domain Admin Group Change",
+        "enabled": true,
+        "type": "match",
+        "description": "A user was added to the 'Domain Admins' group. This is a critical security event.",
+        "level": "CRITICAL",
+        "level_color": "text-red-400",
+        "match": {
+            "event_id": 4728
+        }
+    },
+    {
+        "rule_id": "SIEM-002",
+        "rule_name": "User Account Created",
+        "enabled": true,
+        "type": "match",
+        "description": "A new user account was created.",
+        "level": "MEDIUM",
+        "level_color": "text-yellow-400",
+        "match": {
+            "event_id": 4720
+        }
+    },
+    {
+        "rule_id": "SIEM-003",
+        "rule_name": "Process Created (PowerShell)",
+        "enabled": true,
+        "type": "match",
+        "description": "PowerShell.exe was executed on a machine.",
+        "level": "LOW",
+        "level_color": "text-blue-400",
+        "match": {
+            "process_name": "powershell.exe"
+        }
+    },
+    {
+        "rule_id": "SIEM-101",
+        "rule_name": "Brute Force (5 Failed Logons)",
+        "enabled": true,
+        "type": "threshold",
+        "description": "Detected 5 or more failed logon attempts from a single IP in 60 seconds.",
+        "level": "HIGH",
+        "level_color": "text-orange-400",
+        "match": {
+            "event_type": "FAILED_LOGIN"
+        },
+        "group_by": "source_ip",
+        "threshold": 5,
+        "time_window": 60
+    }
+]
+
