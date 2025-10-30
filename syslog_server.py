@@ -96,7 +96,7 @@ if __name__ == "__main__":
         # --- 2. Initialize Database ---
         print("[Main] Initializing database...")
         # We pass the db name to init_db, and it returns a connection
-        db_conn = database.init_db(SIEM_DB)
+        db_conn = database.init_db()
         if not db_conn:
             raise Exception("Could not initialize database. Exiting.")
         print("[Main] Database initialized successfully.")
