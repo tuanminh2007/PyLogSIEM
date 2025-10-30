@@ -119,14 +119,14 @@ def normalize_from_nxlog_json(log_data: dict, source_host_ip: str) -> dict:
 
     # USER_ADDED_TO_GROUP (4728, 4732)
     elif norm_event["event_type"] == USER_ADDED_TO_GROUP:
-        norm_event["username"] = log_data.get("AccountName", "N/A")
+        norm_event["username"] = log_data.get("SubjectUserName", "N/A")
         norm_event["target_username"] = log_data.get("MemberName", "N/A")
         # This is a local action. Source is the host.
         norm_event["source_ip"] = source_host_ip
         
     # USER_REMOVED_FROM_GROUP (4729, 4733)
     elif norm_event["event_type"] == USER_REMOVED_FROM_GROUP:
-        norm_event["username"] = log_data.get("AccountName", "N/A")
+        norm_event["username"] = log_data.get("SubjectUserName", "N/A")
         norm_event["target_username"] = log_data.get("MemberName", "N/A")
         # This is a local action. Source is the host.
         norm_event["source_ip"] = source_host_ip
