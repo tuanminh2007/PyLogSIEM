@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Log Query - PyLogSIEM{% endblock %}
+
+{% block content %}
+<div class="bg-gray-800 shadow-lg rounded-lg p-6">
+    <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Log Query (M3.2)</h2>
+    
+    <p class="text-sm text-gray-400 mb-4">
+        Enter a basic <code class="text-emerald-400">SELECT</code> query to search the <code class="text-emerald-400">logs</code> table.
+        <br>
+        Example: <code class="text-gray-300">SELECT * FROM logs WHERE event_id = '4625' ORDER BY timestamp DESC LIMIT 10</code>
+    </p>
+
+    <form method="POST" action="{{ url_for('query_page') }}">
+        <div class="mb-4">
+            <label for="sql_query" class="block text-sm font-medium text-gray-300">SQL Query</label>
+            <textarea name="sql_query" id="sql_query" rows="5" 
+                      class="w-full mt-1 p-2 bg-gray-900 border border-gray-700 rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">{{ query }}</textarea>
+        </div>
+        <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-md transition duration-200">
+            Run Query
+        </button>
+    </form>
+</div>
+
+{% if error %}
+    <div class="bg-red-800 text-red-200 shadow-lg rounded-lg p-6 mt-6">
+        <h3 class="text-lg font-semibold mb-2">Query Error</h3>
+        <p class="font-mono">{{ error }}</p>
+    </div>
+{% endif %}
+
+{% if results %}
+    <div class="bg-gray-800 shadow-lg rounded-lg p-6 mt-6">
+        <h3 class="text-lg font-semibold mb-4">Results ({{ results|length }} rows)</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="text-left text-gray-400 font-semibold border-b border-gray-700">
+                    <tr>
+                        {% for header in headers %}
+                            <th class="p-2">{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700">
+                    {% for row in results %}
+                        <tr class="hover:bg-gray-700/50">
+                            {% for header in headers %}
+                                <td class_name="p-2 align-top {% if header == 'raw_log' %}font-mono text-xs max-w-md truncate{% endif %}">
+                                    <div class="p-2" {% if header == 'raw_log' %}title="{{ row[header] }}"{% endif %}>
+                                        {{ row[header] }}
+                                    </div>
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% elif request.method == 'POST' and not error %}
+    <div class="bg-gray-800 shadow-lg rounded-lg p-6 mt-6">
+        <h3 class="text-lg font-semibold mb-2">No Results</h3>
+        <p class="text-gray-400">Your query ran successfully but returned 0 rows.</p>
+    </div>
+{% endif %}
+
+{% endblock %}

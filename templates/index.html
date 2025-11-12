@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - PyLogSIEM{% endblock %}
+
+{% block head_styles %}
+<style>
+    .alert-new {
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .alert-details {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    #live-log-feed {
+        height: 300px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column-reverse;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    
+    <div class="md:col-span-1 flex flex-col gap-6">
+        <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Machine Status</h2>
+            <div id="machine-status-panel" class="space-y-3">
+                <p class="text-gray-500 italic">Waiting for machine data...</p>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h2 class="text-xl font-semibold">Live Log Feed</h2>
+                <button id="clear-log-feed" class="text-xs text-blue-400 hover:text-blue-300 font-semibold">Clear</button>
+            </div>
+            <div id="live-log-feed" class="text-xs font-mono text-gray-400 space-y-2">
+                <p id="log-waiting-message" class="text-gray-500 italic font-sans">Waiting for logs...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="md:col-span-2 bg-gray-800 shadow-lg rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Live Alert Feed</h2>
+        <div id="alert-feed">
+            <p id="alert-waiting-message" class="text-gray-500 italic">Connecting to alert stream... no new alerts.</p>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    function buildAlertDescription(rule, log) {
+        function formatLabel(key) {
+            const labels = {
+                'source_ip': 'Source IP', 'host_ip': 'Host IP', 'username': 'User',
+                'target_username': 'Target User', 'computer_name': 'Computer',
+                'process_name': 'Process', 'failure_reason': 'Failure Reason',
+                'logon_type': 'Logon Type'
+            };
+            return labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
+        const displayFields = [
+            'source_ip', 'computer_name', 'username', 'target_username', 
+            'process_name', 'failure_reason', 'logon_type'
+        ];
+        let details = '';
+        for (const field of displayFields) {
+            if (log[field] && log[field] !== 'N/A') {
+                if (field === 'source_ip') {
+                    details += `<span class="text-gray-300">Source IP:</span> ${log.source_ip} (Host: ${log.host_ip})<br>`;
+                } else if (field === 'process_name') {
+                     details += `<span class="text-gray-300">Process:</span> <span class="font-mono text-xs">${log.process_name}</span><br>`;
+                } else {
+                    details += `<span class="text-gray-300">${formatLabel(field)}:</span> ${log[field]}<br>`;
+                }
+            }
+        }
+        details = details.trim().replace(/<br>$/, '');
+        return `<p>${rule.description}</p><div class="mt-2 text-sm text-gray-400">${details}</div>`;
+    }
+
+    document.addEventListener('DOMContentLoaded', (event) => {
+        
+        const alertFeed = document.getElementById('alert-feed');
+        const logFeed = document.getElementById('live-log-feed');
+        const machinePanel = document.getElementById('machine-status-panel');
+
+        const clearLogBtn = document.getElementById('clear-log-feed');
+        clearLogBtn.addEventListener('click', () => {
+            logFeed.innerHTML = '<p id="log-waiting-message" class="text-gray-500 italic font-sans">Log feed cleared...</p>';
+        });
+
+        socket.on('connect', () => {
+             const alertWaiting = document.getElementById('alert-waiting-message');
+             if (alertWaiting && alertFeed.children.length === 1) {
+                alertFeed.innerHTML = '<p id="alert-waiting-message" class="text-gray-500 italic">Waiting for new alerts...</p>';
+             }
+             const logWaiting = document.getElementById('log-waiting-message');
+             if (logWaiting) {
+                logWaiting.remove();
+             }
+        });
+
+        socket.on('new_alert', (alert) => {
+            const waitingMessage = document.getElementById('alert-waiting-message');
+            if (waitingMessage) {
+                waitingMessage.remove();
+            }
+            const rule = alert.rule;
+            const log = alert.normalized_log;
+            const rawLog = alert.raw_log;
+            const thresholdLogs = alert.triggering_logs_raw;
+            const description_html = buildAlertDescription(rule, log);
+            let details_json = "";
+            if (thresholdLogs && thresholdLogs.length > 0) {
+                details_json = JSON.stringify(thresholdLogs, null, 2);
+            } else {
+                details_json = JSON.stringify(rawLog, null, 2);
+            }
+            const alertElement = document.createElement('div');
+            alertElement.className = 'bg-gray-700 p-4 rounded-md mb-3 shadow alert-new';
+            alertElement.innerHTML = `
+                <div class="alert-summary cursor-pointer">
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-lg ${alert.level_color}">${rule.rule_name} [${rule.rule_id}]</span>
+                        <span class="text-sm text-gray-400">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="text-gray-300 mt-2">${description_html}</div>
+                    <span class="text-xs text-blue-400 mt-2 block toggle-details">(Click to show full log)</span>
+                </div>
+                <div class="alert-details hidden mt-4">
+                    <pre class="bg-gray-900 text-xs p-4 rounded-lg overflow-x-auto">${details_json}</pre>
+                </div>
+            `;
+            const summary = alertElement.querySelector('.alert-summary');
+            const details = alertElement.querySelector('.alert-details');
+            const toggleText = alertElement.querySelector('.toggle-details');
+            summary.addEventListener('click', () => {
+                const isHidden = details.classList.toggle('hidden');
+                if (isHidden) {
+                    toggleText.textContent = '(Click to show full log)';
+                } else {
+                    toggleText.textContent = '(Click to hide full log)';
+                }
+            });
+            alertFeed.prepend(alertElement);
+            const allAlerts = alertFeed.querySelectorAll('.alert-new');
+            if (allAlerts.length > 5) {
+                allAlerts[allAlerts.length - 1].remove(); 
+            }
+        });
+
+        socket.on('new_log', (log) => {
+            const logWaiting = document.getElementById('log-waiting-message');
+            if (logWaiting) {
+                logWaiting.remove();
+            }
+            
+            const logElement = document.createElement('div');
+            logElement.className = 'w-full border-b border-gray-700/50 pb-1'; 
+            logElement.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center whitespace-nowrap">
+                        <span class="text-gray-500 mr-2">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span class="text-emerald-400 mr-2">[${log.event_id}]</span>
+                    </div>
+                    <span class="text-gray-500 truncate ml-2">(${log.computer_name})</span>
+                </div>
+                <div class="text-gray-300 w-full truncate pl-2">
+                    ${log.event_description}
+                </div>
+            `;
+            
+            logFeed.prepend(logElement);
+            
+            if (logFeed.children.length > 20) {
+                logFeed.children[logFeed.children.length - 1].remove();
+            }
+        });
+
+        socket.on('update_machine_stats', (machines) => {
+            if (machines.length === 0) {
+                machinePanel.innerHTML = '<p class="text-gray-500 italic">Waiting for machine data...</p>';
+                return;
+            }
+            
+            machinePanel.innerHTML = '';
+            
+            machines.sort((a, b) => a.hostname.localeCompare(b.hostname));
+
+            for (const machine of machines) {
+                const statusColor = machine.status === 'Online' ? 'bg-green-500' : 'bg-red-500';
+                const machineElement = document.createElement('div');
+                machineElement.className = 'text-sm border-b border-gray-700/50 pb-2'; 
+                
+                machineElement.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-200 truncate" title="${machine.hostname}">${machine.hostname}</span>
+                        <span class="flex items-center flex-shrink-0 ml-2">
+                            <span class="inline-block w-2.5 h-2.5 ${statusColor} rounded-full mr-1.5"></span>
+                            ${machine.status}
+                        </span>
+                    </div>
+                    <div class="text-xs text-gray-400 font-mono flex justify-between">
+                         <span>${machine.ip}</span>
+                         <span>${machine.total_logs} logs</span>
+                    </div>
+                `;
+                machinePanel.appendChild(machineElement);
+            }
+        });
+    });
+</script>
+{% endblock %}

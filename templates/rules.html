@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Rule Management - PyLogSIEM{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="p-4 mb-4 rounded-md {{ 'bg-green-800 text-green-200' if category == 'success' else 'bg-red-800 text-red-200' }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div class="md:col-span-1">
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Add New Rule</h2>
+                
+                <div class="mb-3">
+                    <label for="rule-template" class="block text-sm font-medium text-gray-400">Rule Template (Optional)</label>
+                    <select id="rule-template-select" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="">-- Custom Rule --</option>
+                        <optgroup label="MITRE: Initial Access">
+                            <option value="brute_force">T1110.003: Brute Force</option>
+                            <option value="password_spray">T1110.003: Password Spraying</option>
+                            <option value="rdp_logon">T1021.001: RDP Logon</option>
+                        </optgroup>
+                        <optgroup label="MITRE: Execution">
+                            <option value="powershell">T1059.001: PowerShell Execution</option>
+                            <option value="psexec">T1569.002: Remote Service (PsExec)</option>
+                        </optgroup>
+                        <optgroup label="MITRE: Persistence">
+                            <option value="new_user">T1136.001: New User Creation</option>
+                            <option value="add_admin">T1098: Add to Admin Group</option>
+                            <option value="new_task">T1053.005: Scheduled Task</option>
+                        </optgroup>
+                        <optgroup label="MITRE: Credential Access">
+                            <option value="lsass_dump">T1003.001: LSASS Memory Dump</option>
+                        </optgroup>
+                        <optgroup label="MITRE: Defense Evasion">
+                            <option value="clear_logs">T1070.001: Event Log Cleared</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <form action="{{ url_for('add_rule') }}" method="POST" id="rule-form">
+                    <div class="mb-3">
+                        <label for="rule_id" class="block text-sm font-medium text-gray-400">Rule ID (e.g., SIEM-101)</label>
+                        <input type="text" name="rule_id" id="rule_id" required class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div class="mb-3">
+                        <label for="rule_name" class="block text-sm font-medium text-gray-400">Rule Name</label>
+                        <input type="text" name="rule_name" id="rule_name" required class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="block text-sm font-medium text-gray-400">Description</label>
+                        <textarea name="description" id="description" rows="2" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="level" class="block text-sm font-medium text-gray-400">Level</label>
+                        <select name="level" id="level" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option>LOW</option>
+                            <option>MEDIUM</option>
+                            <option>HIGH</option>
+                            <option>CRITICAL</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="rule-type-select" class="block text-sm font-medium text-gray-400">Rule Type</label>
+                        <select name="rule_type" id="rule-type-select" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="match">Match</option>
+                            <option value="threshold">Threshold</option>
+                        </select>
+                    </div>
+
+                    <div id="match-fields">
+                        <h3 class="font-semibold mt-4 mb-2 text-gray-300">Match Criteria</h3>
+                        <div class="mb-3">
+                            <label for="match_event_id" class="block text-sm font-medium text-gray-400">EventID (Required)</label>
+                            <input type="number" name="match_event_id" id="match_event_id" required class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div class="mb-3">
+                            <label for="match_process_name" class="block text-sm font-medium text-gray-400">NewProcessName (Optional)</label>
+                            <input type="text" name="match_process_name" id="match_process_name" placeholder="*powershell.exe" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+
+                    <div id="threshold-fields" class="hidden">
+                        <h3 class="font-semibold mt-4 mb-2 text-gray-300">Threshold Criteria</h3>
+                        <div class="mb-3">
+                            <label for="threshold_count" class="block text-sm font-medium text-gray-400">Threshold Count</label>
+                            <input type="number" name="threshold_count" id="threshold_count" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div class="mb-3">
+                            <label for="timeframe_seconds" class="block text-sm font-medium text-gray-400">Timeframe (seconds)</label>
+                            <input type="number" name="timeframe_seconds" id="timeframe_seconds" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div class="mb-3">
+                            <label for="group_by" class="block text-sm font-medium text-gray-400">Group By (Raw Log Key)</label>
+                            <input type="text" name="group_by" id="group_by" class="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-md transition duration-200 mt-4">Add Rule</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="md:col-span-2">
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Current Rules ({{ rules|length }})</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead class="text-left text-sm text-gray-400">
+                            <tr>
+                                <th class="p-2">ID</th>
+                                <th class="p-2">Name</th>
+                                <th class="p-2">Type</th>
+                                <th class="p-2">Level</th>
+                                <th class="p-2">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+                            {% for rule in rules %}
+                            <tr class="hover:bg-gray-700">
+                                <td class="p-2 font-mono text-xs">{{ rule.rule_id }}</td>
+                                <td class="p-2">{{ rule.rule_name }}</td>
+                                <td class="p-2"><span class="px-2 py-0.5 rounded-full text-xs font-medium {{ 'bg-blue-800 text-blue-200' if rule.type == 'match' else 'bg-purple-800 text-purple-200' }}">{{ rule.type }}</span></td>
+                                <td class="p-2">{{ rule.level }}</td>
+                                <td class="p-2">
+                                    <form action="{{ url_for('delete_rule', rule_id=rule.rule_id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this rule?');">
+                                        <button type="submit" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        const ruleTypeSelect = document.getElementById('rule-type-select');
+        const thresholdFields = document.getElementById('threshold-fields');
+        
+        function toggleThresholdFields() {
+            const ruleType = ruleTypeSelect.value;
+            if (ruleType === 'threshold') {
+                thresholdFields.classList.remove('hidden');
+            } else {
+                thresholdFields.classList.add('hidden');
+            }
+        }
+        
+        ruleTypeSelect.addEventListener('change', toggleThresholdFields);
+        
+        const form = document.getElementById('rule-form');
+        const ruleTemplates = {
+            'brute_force': {
+                rule_id: 'SIEM-101', rule_name: 'Brute Force Logon Failure',
+                description: 'Detects multiple failed logon attempts from a single IP address.',
+                level: 'HIGH', rule_type: 'threshold', match_event_id: 4625,
+                threshold_count: 5, timeframe_seconds: 60, group_by: 'IpAddress'
+            },
+            'password_spray': {
+                rule_id: 'SIEM-102', rule_name: 'Password Spraying Attack',
+                description: 'Detects many failed logon attempts for *different users* from a single IP.',
+                level: 'HIGH', rule_type: 'threshold', match_event_id: 4625,
+                threshold_count: 10, timeframe_seconds: 300, group_by: 'IpAddress'
+            },
+            'rdp_logon': {
+                rule_id: 'SIEM-103', rule_name: 'Successful RDP Logon',
+                description: 'Detects a successful Remote Desktop (RDP) logon.',
+                level: 'MEDIUM', rule_type: 'match', match_event_id: 4624,
+            },
+            'powershell': {
+                rule_id: 'SIEM-104', rule_name: 'PowerShell Process Started',
+                description: 'Detects the start of a PowerShell process.',
+                level: 'MEDIUM', rule_type: 'match', match_event_id: 4688,
+                match_process_name: '*powershell.exe'
+            },
+            'psexec': {
+                rule_id: 'SIEM-105', rule_name: 'PsExec Service Detected',
+                description: 'Detects the PsExec service being created on a host.',
+                level: 'HIGH', rule_type: 'match', match_event_id: 4688,
+                match_process_name: '*PSEXESVC.exe'
+            },
+            'new_user': {
+                rule_id: 'SIEM-106', rule_name: 'New User Account Created',
+                description: 'Detects the creation of a new user account.',
+                level: 'MEDIUM', rule_type: 'match', match_event_id: 4720
+            },
+            'add_admin': {
+                rule_id: 'SIEM-107', rule_name: 'Member Added to Privileged Group',
+                description: 'Detects a user being added to a privileged group (e.g., Domain Admins).',
+                level: 'CRITICAL', rule_type: 'match', match_event_id: 4728
+            },
+            'new_task': {
+                rule_id: 'SIEM-108', rule_name: 'New Scheduled Task Created',
+                description: 'Detects the creation of a new scheduled task for persistence.',
+                level: 'MEDIUM', rule_type: 'match', match_event_id: 4698
+            },
+            'lsass_dump': {
+                rule_id: 'SIEM-109', rule_name: 'LSASS Memory Dump Attempt',
+                description: 'Detects process creation for procdump targeting lsass.exe.',
+                level: 'CRITICAL', rule_type: 'match', match_event_id: 4688,
+                match_process_name: '*procdump.exe'
+            },
+            'clear_logs': {
+                rule_id: 'SIEM-110', rule_name: 'Security Event Log Cleared',
+                description: 'Detects that the security event log was cleared.',
+                level: 'HIGH', rule_type: 'match', match_event_id: 1102
+            }
+        };
+
+        document.getElementById('rule-template-select').addEventListener('change', function(e) {
+            const templateKey = e.target.value;
+            const template = ruleTemplates[templateKey];
+
+            form.rule_id.value = template?.rule_id || '';
+            form.rule_name.value = template?.rule_name || '';
+            form.description.value = template?.description || '';
+            form.level.value = template?.level || 'LOW';
+            form.rule_type.value = template?.rule_type || 'match';
+            form.match_event_id.value = template?.match_event_id || '';
+            form.match_process_name.value = template?.match_process_name || '';
+            form.threshold_count.value = template?.threshold_count || '';
+            form.timeframe_seconds.value = template?.timeframe_seconds || '';
+            form.group_by.value = template?.group_by || '';
+
+            ruleTypeSelect.dispatchEvent(new Event('change'));
+        });
+        toggleThresholdFields();
+    });
+</script>
+{% endblock %}

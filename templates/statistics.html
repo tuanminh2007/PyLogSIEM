@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Statistics - PyLogSIEM{% endblock %}
+
+{% block content %}
+    <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Database Statistics</h2>
+    </div>
+
+    {% if error %}
+        <div class="bg-red-800 text-red-200 shadow-lg rounded-lg p-6 mt-6">
+            <h3 class="text-lg font-semibold mb-2">Error</h3>
+            <p class="font-mono">{{ error }}</p>
+        </div>
+    {% else %}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6 text-center">
+                <h3 class="text-lg font-semibold text-gray-400">Avg. Logs / Hour</h3>
+                <p class="text-4xl font-bold text-emerald-400 mt-2">{{ stats.avg_logs_per_hour }}</p>
+            </div>
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6 text-center">
+                <h3 class="text-lg font-semibold text-gray-400">Avg. Failed Logons / Hour</h3>
+                <p class="text-4xl font-bold text-orange-400 mt-2">{{ stats.avg_failed_logons_per_hour }}</p>
+            </div>
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6 text-center">
+                <h3 class="text-lg font-semibold text-gray-400">Avg. Processes Created / Hour</h3>
+                <p class="text-4xl font-bold text-blue-400 mt-2">{{ stats.avg_processes_per_hour }}</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Log Activity by Machine</h3>
+                <table class="w-full text-sm">
+                    <thead class="text-left text-gray-400">
+                        <tr><th class="p-2">Machine</th><th class="p-2">Total Logs</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for row in stats.top_machines %}
+                        <tr class="hover:bg-gray-700/50">
+                            <td class="p-2 truncate" title="{{ row.computer_name }}">{{ row.computer_name }}</td>
+                            <td class="p-2 font-mono">{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Top 5 Event IDs</h3>
+                <table class="w-full text-sm table-fixed">
+                    <thead class="text-left text-gray-400">
+                        <tr>
+                            <th class="p-2 w-1/5">Event</th>
+                            <th class="p-2 w-3/5">Description</th> <th class="p-2 w-1/5">Count</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for row in stats.top_events %}
+                        <tr class="hover:bg-gray-700/50">
+                            <td class="p-2 font-mono text-emerald-400">{{ row.event_id }}</td>
+                            <td class="p-2 truncate" title="{{ row.event_description }}">{{ row.event_description }}</td>
+                            <td class="p-2 font-mono">{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Top 5 Failed Logon Users</h3>
+                <table class="w-full text-sm">
+                    <thead class="text-left text-gray-400">
+                        <tr><th class="p-2">Username</th><th class="p-2">Count</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for row in stats.top_failed_users %}
+                        <tr class="hover:bg-gray-700/50">
+                            <td class="p-2 truncate" title="{{ row.username }}">{{ row.username }}</td>
+                            <td class="p-2 font-mono">{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Top 5 "Attacker" Source IPs</h3>
+                <table class="w-full text-sm">
+                    <thead class="text-left text-gray-400">
+                        <tr><th class="p-2">Source IP</th><th class="p-2">Count</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for row in stats.top_attacker_ips %}
+                        <tr class="hover:bg-gray-700/50">
+                            <td class="p-2 font-mono">{{ row.source_ip }}</td>
+                            <td class="p-2 font-mono">{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Top 5 Active Users</h3>
+                <table class="w-full text-sm">
+                    <thead class="text-left text-gray-400">
+                        <tr><th class="p-2">Username</th><th class="p-2">Count</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for row in stats.top_active_users %}
+                        <tr class="hover:bg-gray-700/50">
+                            <td class="p-2 truncate" title="{{ row.username }}">{{ row.username }}</td>
+                            <td class="p-2 font-mono">{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    {% endif %}
+{% endblock %}

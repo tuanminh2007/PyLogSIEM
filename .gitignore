@@ -1,0 +1,16 @@
+Python
+
+venv/
+pycache/
+*.pyc
+
+Data & Logs 
+
+raw_logs/
+processed_logs/
+
+*.db
+*.db-journal
+
+Documentation
+documentation/

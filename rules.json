@@ -1,0 +1,46 @@
+[
+  {
+    "rule_id": "SIEM-001",
+    "rule_name": "Event ID 4728 | Member Added to Global Group",
+    "description": "An user was added to a global privileged group.",
+    "level": "CRITICAL",
+    "type": "match",
+    "match": {
+      "EventID": 4728
+    }
+  },
+  {
+    "rule_id": "SIEM-002",
+    "rule_name": "Event ID 4732 | Member Added to Local Group",
+    "description": "An user was added to a local privileged group.",
+    "level": "HIGH",
+    "type": "match",
+    "match": {
+      "EventID": 4732
+    }
+  },
+  {
+    "rule_id": "SIEM-003",
+    "rule_name": "Event ID 4688 | PowerShell Process Started",
+    "description": "Detects the start of a PowerShell process.",
+    "level": "MEDIUM",
+    "type": "match",
+    "match": {
+      "EventID": 4688,
+      "NewProcessName": "*powershell.exe"
+    }
+  },
+  {
+    "rule_id": "SIEM-004",
+    "rule_name": "Brute Force Logon Failure",
+    "description": "Detects multiple failed logon attempts from a single IP address in a short time.",
+    "level": "HIGH",
+    "type": "threshold",
+    "match": {
+      "EventID": 4625
+    },
+    "group_by": "IpAddress",
+    "threshold": 5,
+    "timeframe_seconds": 60
+  }
+]
